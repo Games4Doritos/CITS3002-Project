@@ -91,11 +91,12 @@ class TransportLayer:
     def receive_from_below(self, segment):
         print(f"{self.device.name}: Layer 4: Segment received from Network Layer")
         
+        # check if checksum is valid, if not; discard
         if not self._verify_checksum(segment):
             print(f"{self.device.name}: Layer 4: Invalid checksum, segment has been discarded")
             return
         
-        # 2. check if it's DATA or ACK
+        # check if it's DATA or ACK
         if segment.type == L4_TYPE_DATA:
             print(f"{self.device.name}: Layer 4: Checksum verified")
             print(f"{self.device.name}: Layer 4: DATA segment delivered to Application Layer, Data size={len(segment.data)}")
@@ -114,5 +115,15 @@ class TransportLayer:
 
     def _verify_checksum(self, segment):
         return segment.checksum == compute_checksum(segment.data):
-
     
+
+class NetworkLayer:
+    def __init__(self, device):
+        self.device = device
+
+    def receieve_from_above(self, segment, dst_ip):
+        print(f"{self.device.name}: Layer 3: Segment received from Transport Layer: SRC_IP={self.device.ip}, DST_IP={dst_ip}, TTL={IP_DEFAULT_TTL}")
+
+        packet = IPPacket(self.device.ip, dst_ip, segment)
+
+        print(f"{self.device.name}: Layer 3: Destination IP read: {dst_ip}")
