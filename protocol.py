@@ -121,9 +121,37 @@ class NetworkLayer:
     def __init__(self, device):
         self.device = device
 
+    #helper function to convert IP adresses to integers  
+    def _ip_to_int(self, address):
+        parts = address.split(".")
+        int_parts = (int(parts[0]) << 24 | int(parts[1]) << 16 | int(parts[2]) << 8 | int(parts[3]))  
+        return int_parts
+        
+
+    # helper function to lookup the routing table
+    def _lookup_routing_table(self, dst_ip):
+
+        # this convert dst_ip to an integer by shifting the values to their bitwise positions then summing all
+        dst_ip_int = self._ip_to_int(dst_ip)
+
+        for entry in self.device.routing_table:
+            
+            # convert entry["network"] to an integer
+            network_int = self._ip_to_int(entry["network"])
+
+            # create a standard mask for network comparison
+            mask = (0xFFFFFFFF << (32 - entry["prefix"])) & 0xFFFFFFFF
+
+            # check if the dst_ip matches the network in the table, if so, return
+            if dst_ip_int & mask == network_int & mask:
+                return entry
+            
+        return None
+
     def receieve_from_above(self, segment, dst_ip):
         print(f"{self.device.name}: Layer 3: Segment received from Transport Layer: SRC_IP={self.device.ip}, DST_IP={dst_ip}, TTL={IP_DEFAULT_TTL}")
 
         packet = IPPacket(self.device.ip, dst_ip, segment)
 
         print(f"{self.device.name}: Layer 3: Destination IP read: {dst_ip}")
+
