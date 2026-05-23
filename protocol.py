@@ -209,3 +209,6 @@ class NetworkLayer:
             self.device.datalink.receive_from_above(packet, next_hop)
             
             
+class DataLinkLayer:
+    def __init__(self, device):
+        self.device = device
