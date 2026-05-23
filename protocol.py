@@ -19,14 +19,14 @@ def compute_checksum(data: bytes) -> int:
 ##### HEADER CLASSES #####
 
 class UDPSegment:
-    def __init__(self, src_port, dst_port, seg_type, seq, data=b""):
+    def __init__(self, src_port, dst_port, seg_type, seq, payload=b""):
         self.src_port = src_port
         self.dst_port = dst_port
-        self.length = len(data) + UDP_HEADER_SIZE
-        self.checksum = compute_checksum(data)
+        self.length = len(payload) + UDP_HEADER_SIZE
+        self.checksum = compute_checksum(payload)
         self.type = seg_type
         self.seq = seq
-        self.data = data
+        self.payload = payload
 
     def __repr__(self):
         return (f"UDPSegment(type={'DATA' if self.type == 0 else 'ACK'}, "
@@ -67,15 +67,18 @@ class TransportLayer:
         self.seq = 0
         
     def _send_above(self, segment: UDPSegment):
-        print(f"{self.device.name}: Layer 4: DATA segment delivered to Application Layer, Data size={len(segment.data)}")
+        # log delivery to application layer (not actually implemented as per spec)
+        print(f"{self.device.name}: Layer 4: DATA segment delivered to Application Layer, Data size={len(segment.payload)}")
         
     def _send_below(self, segment: UDPSegment, dst_ip:str):
+        # send segment down to network layer
         print(f"{self.device.name}: Layer 4: Segment sent to network layer")
         self.device.network.receive_from_above(segment, dst_ip)
         self.seq = 1 - self.seq
         
     def _verify_checksum(self, segment: UDPSegment):
-        if segment.checksum == compute_checksum(segment.data):
+        # check if actual checksum = computed checksum
+        if segment.checksum == compute_checksum(segment.payload):
             print(f"{self.device.name}: Layer 4: Checksum verified")
             return True
         else:
@@ -123,9 +126,6 @@ class TransportLayer:
             self.seq = 1 - self.seq
                 
 
-    
-    
-
 class NetworkLayer:
     def __init__(self, device):
         self.device = device
@@ -136,7 +136,6 @@ class NetworkLayer:
         int_parts = (int(parts[0]) << 24 | int(parts[1]) << 16 | int(parts[2]) << 8 | int(parts[3]))  
         return int_parts
         
-
     # helper function to lookup the routing table
     def _lookup_routing_table(self, dst_ip):
 
@@ -156,7 +155,19 @@ class NetworkLayer:
                 return entry
             
         return None
-
+    
+    def _send_above(self, segment):
+        print(f"{self.device.name}: Layer 3: Segment delivered to Transport Layer")
+        
+        # pass up to transport layer
+        self.device.transport.receive_from_below(segment)
+        
+    def _send_below(self, packet, next_hop):
+        print(f"{self.device.name}: Layer 3: Packet forwarded to Data Link Layer")  
+        
+        # pass down to DataLinkLayer
+        self.device.datalink.receive_from_above(packet, next_hop)
+    
     def receive_from_above(self, segment, dst_ip):
         print(f"{self.device.name}: Layer 3: Segment received from Transport Layer: SRC_IP={self.device.ip}, DST_IP={dst_ip}, TTL={IP_DEFAULT_TTL}")
         
@@ -168,16 +179,21 @@ class NetworkLayer:
         
         # routing table lookup
         entry = self._lookup_routing_table(dst_ip)
+        
+        if not entry:
+            print(f"{self.device.name}: Layer 3: No Next-hop IP available, discarding packet")
+            return
+        
+        print(f"{self.device.name}: Layer 3: Routing table lookup performed")
+        
         next_hop = entry["next_hop"] if entry["next_hop"] is not None else dst_ip
         
-        # print routing decision
-        print(f"{self.device.name}: Layer 3: Routing table lookup performed")
+        # print routing decision 
         print(f"{self.device.name}: Layer 3: Next-hop IP determined: {next_hop}")
         print(f"{self.device.name}: Layer 3: Outgoing interface selected")
-        print(f"{self.device.name}: Layer 3: Packet forwarded to Data Link Layer")        
         
-        # pass down to DataLinkLayer
-        self.device.datalink.receive_from_above(packet, next_hop)
+        self._send_below(packet, next_hop)
+       
 
     def receive_from_below(self, packet):
         print(f"{self.device.name}: Layer 3: Packet received from Data Link Layer: SRC_IP={packet.src_ip}, DST_IP={packet.dst_ip}, TTL={packet.ttl}")
@@ -185,8 +201,11 @@ class NetworkLayer:
 
         if packet.dst_ip == self.device.ip:
             print(f"{self.device.name}: Layer 3: Packet identified as local delivery")
-            print(f"{self.device.name}: Layer 3: Segment delivered to Transport Layer")
-            self.device.transport.receive_from_below(packet.payload)
+            
+            # decapsulate packet to send payload above
+            payload = packet.payload
+            
+            self._send_above(payload)
 
         else:
             # decrement TTL
@@ -204,10 +223,8 @@ class NetworkLayer:
             print(f"{self.device.name}: Layer 3: Routing table lookup performed")
             print(f"{self.device.name}: Layer 3: Next-hop IP determined: {next_hop}")
             print(f"{self.device.name}: Layer 3: Outgoing interface selected ({iface})")
-            print(f"{self.device.name}: Layer 3: Packet forwarded to Data Link Layer")
-
-            # forward down to datalink 
-            self.device.datalink.receive_from_above(packet, next_hop)
+            
+            self._send_below(packet, next_hop)
             
             
 class DataLinkLayer:
