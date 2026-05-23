@@ -174,13 +174,30 @@ class NetworkLayer:
         print(f"{self.device.name}: Layer 3: Packet received from Data Link Layer: SRC_IP={packet.src_ip}, DST_IP={packet.dst_ip}, TTL={packet.ttl}")
         print(f"{self.device.name}: Layer 3: Destination IP read: {packet.dst_ip}")
 
-        if packet.dst_ip = self.device.ip:
-            # local delivery
-            pass
+        if packet.dst_ip == self.device.ip:
+            print(f"{self.device.name}: Layer 3: Packet identified as local delivery")
+            print(f"{self.device.name}: Layer 3: Segment delivered to Transport Layer")
+            self.device.transport.receive_from_below(packet.payload)
+
         else:
-            # router forwarding
-            # 1. decrement TTL
-            # 2. check if TTL == 0, drop if so
-            # 3. lookup routing table
-            # 4. forward down to datalink 
-            pass
+            # decrement TTL
+            packet.ttl -= 1
+            # check if TTL == 0, drop if so
+            if packet.ttl == 0:
+                print(f"{self.device.name}: Layer 3: TTL expired, packet dropped")
+                return
+            # lookup routing table
+            entry = self._lookup_routing_table(packet.dst_ip)
+            next_hop = entry["next_hop"] if entry["next_hop"] is not None else packet.dst_ip
+            iface = entry["iface"]
+
+            print(f"{self.device.name}: Layer 3: TTL decremented: {packet.ttl + 1} → {packet.ttl}")
+            print(f"{self.device.name}: Layer 3: Routing table lookup performed")
+            print(f"{self.device.name}: Layer 3: Next-hop IP determined: {next_hop}")
+            print(f"{self.device.name}: Layer 3: Outgoing interface selected ({iface})")
+            print(f"{self.device.name}: Layer 3: Packet forwarded to Data Link Layer")
+
+            # forward down to datalink 
+            self.device.datalink.receive_from_above(packet, next_hop)
+            
+            
