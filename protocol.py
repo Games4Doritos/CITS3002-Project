@@ -148,14 +148,6 @@ class NetworkLayer:
             
         return None
 
-    def receieve_from_above(self, segment, dst_ip):
-        print(f"{self.device.name}: Layer 3: Segment received from Transport Layer: SRC_IP={self.device.ip}, DST_IP={dst_ip}, TTL={IP_DEFAULT_TTL}")
-
-        packet = IPPacket(self.device.ip, dst_ip, segment)
-
-        print(f"{self.device.name}: Layer 3: Destination IP read: {dst_ip}")
-
-
     def receive_from_above(self, segment, dst_ip):
         print(f"{self.device.name}: Layer 3: Segment received from Transport Layer: SRC_IP={self.device.ip}, DST_IP={dst_ip}, TTL={IP_DEFAULT_TTL}")
         
@@ -177,3 +169,18 @@ class NetworkLayer:
         
         # pass down to DataLinkLayer
         self.device.datalink.receive_from_above(packet, next_hop)
+
+    def receive_from_below(self, packet):
+        print(f"{self.device.name}: Layer 3: Packet received from Data Link Layer: SRC_IP={packet.src_ip}, DST_IP={packet.dst_ip}, TTL={packet.ttl}")
+        print(f"{self.device.name}: Layer 3: Destination IP read: {packet.dst_ip}")
+
+        if packet.dst_ip = self.device.ip:
+            # local delivery
+            pass
+        else:
+            # router forwarding
+            # 1. decrement TTL
+            # 2. check if TTL == 0, drop if so
+            # 3. lookup routing table
+            # 4. forward down to datalink 
+            pass
