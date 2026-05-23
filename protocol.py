@@ -64,6 +64,22 @@ class TransportLayer:
     def __init__(self, device):
         self.device = device  # reference to parent Host
         self.seq = 0
+        
+    def _send_above(self, segment: UDPSegment):
+        print(f"{self.device.name}: Layer 4: DATA segment delivered to Application Layer, Data size={len(segment.data)}")
+        
+    def _send_below(self, segment: UDPSegment):
+        print(f"{self.device.name}: Layer 4: Segment sent to network layer")
+        self.device.network.receive_from_above(segment)
+        self.seq = 1 - self.seq
+        
+    def _verify_checksum(self, segment: UDPSegment):
+        if segment.checksum == compute_checksum(segment.data):
+            print(f"{self.device.name}: Layer 4: Checksum verified")
+            return True
+        else:
+            print(f"{self.device.name}: Layer 4: Invalid checksum, segment has been discarded")
+            return False
 
     def receive_from_above(self, size: int):
         """Called by the application layer to send data."""
@@ -77,44 +93,36 @@ class TransportLayer:
                 segment = UDPSegment(UDP_SRC_PORT, UDP_DST_PORT, L4_TYPE_DATA, self.seq, chunk)
                 print(f"{self.device.name}: Layer 4: Checksum computed")
                 print(f"{self.device.name}: Layer 4: Segment created by adding transport layer header ({'DATA' if segment.type == L4_TYPE_DATA else 'ACK'}, seq={self.seq}) (encapsulation)")
-                print(f"{self.device.name}: Layer 4: Segment sent to the Network Layer")
-                self.device.network.receive_from_above(segment)
-                self.seq = 1 - self.seq
+                self._send_below(segment)
         else:
             segment = UDPSegment(UDP_SRC_PORT, UDP_DST_PORT, L4_TYPE_DATA, self.seq, data)
             print(f"{self.device.name}: Layer 4: Checksum computed")
             print(f"{self.device.name}: Layer 4: Segment created by adding transport layer header ({'DATA' if segment.type == L4_TYPE_DATA else 'ACK'}, seq={self.seq}) (encapsulation)")
-            print(f"{self.device.name}: Layer 4: Segment sent to the Network Layer")
-            self.device.network.receive_from_above(segment)
-            self.seq = 1 - self.seq
+            self._send_below(segment)
 
     def receive_from_below(self, segment):
         print(f"{self.device.name}: Layer 4: Segment received from Network Layer")
         
         # check if checksum is valid, if not; discard
         if not self._verify_checksum(segment):
-            print(f"{self.device.name}: Layer 4: Invalid checksum, segment has been discarded")
             return
         
         # check if it's DATA or ACK
         if segment.type == L4_TYPE_DATA:
-            print(f"{self.device.name}: Layer 4: Checksum verified")
-            print(f"{self.device.name}: Layer 4: DATA segment delivered to Application Layer, Data size={len(segment.data)}")
+            
+            self._send_above(segment)
             print(f"{self.device.name}: Layer 4: Segment created by adding transport layer header (ACK, seq={segment.seq})")
-            print(f"{self.device.name}: Layer 4: Segment sent to network layer")
             
             ACK = UDPSegment(UDP_DST_PORT, UDP_SRC_PORT, L4_TYPE_ACK, segment.seq)
-            self.device.network.receive_from_above(ACK)
             
-            self.seq = 1 - self.seq
+            self._send_below(ACK)
         
         else:  # it's an ACK
             print(f"{self.device.name}: Layer 4: ACK received: seq={segment.seq}")
             self.seq = 1 - self.seq
                 
 
-    def _verify_checksum(self, segment):
-        return segment.checksum == compute_checksum(segment.data):
+    
     
 
 class NetworkLayer:
