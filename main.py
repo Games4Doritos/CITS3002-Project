@@ -40,7 +40,7 @@ def main():
         iface_mac=R1_IFACE_MAC
     )
     
-    hostA.transport.receive_from_above(size=dataSize)
+    hostA.transport.receive_from_above(size=dataSize, dst_ip=IP_HOST_B)
 
 
 if __name__ == "__main__":
