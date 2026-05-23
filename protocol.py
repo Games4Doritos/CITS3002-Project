@@ -155,3 +155,25 @@ class NetworkLayer:
 
         print(f"{self.device.name}: Layer 3: Destination IP read: {dst_ip}")
 
+
+    def receive_from_above(self, segment, dst_ip):
+        print(f"{self.device.name}: Layer 3: Segment received from Transport Layer: SRC_IP={self.device.ip}, DST_IP={dst_ip}, TTL={IP_DEFAULT_TTL}")
+        
+        # create IPPacket
+        packet = IPPacket(self.device.ip, dst_ip, segment)
+        
+        # print destination IP read
+        print(f"{self.device.name}: Layer 3: Destination IP read: {dst_ip}")
+        
+        # routing table lookup
+        entry = self._lookup_routing_table(dst_ip)
+        next_hop = entry["next_hop"] if entry["next_hop"] is not None else dst_ip
+        
+        # print routing decision
+        print(f"{self.device.name}: Layer 3: Routing table lookup performed")
+        print(f"{self.device.name}: Layer 3: Next-hop IP determined: {next_hop}")
+        print(f"{self.device.name}: Layer 3: Outgoing interface selected")
+        print(f"{self.device.name}: Layer 3: Packet forwarded to Data Link Layer")        
+        
+        # pass down to DataLinkLayer
+        self.device.datalink.receive_from_above(packet, next_hop)
