@@ -38,7 +38,7 @@ IP_PROTO_UDP    = 17       # Protocol field value indicating a UDP-like payload
 
 UDP_SRC_PORT    = 5000     # Source port used by the sending application
 UDP_DST_PORT    = 80       # Destination port used by the receiving application
-UDP_HEADER_SIZE = 9        # Bytes: src_port(2) + dst_port(2) + length(2)
+UDP_HEADER_SIZE = 10        # Bytes: src_port(2) + dst_port(2) + length(2)
                            #        + checksum(2) + type(1) + seq(1) = 10
                            # (sequence number is included in the fixed header)
 UDP_MAX_DATA    = 500      # Maximum application bytes per segment
