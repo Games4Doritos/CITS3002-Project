@@ -10,9 +10,9 @@ This is the implementation for the Computer Networks (CITS3002) Project: Mini In
 It simulates a simplified network stack consisting of the Data Link Layer (2), the Network Layer (3) and the Transport Layer (4), in the network topology below:
     
     A--------R1--------B
-        L1        L1
+        L1        L2
 
-    (A and B are Hosts, R1 is a Router)
+    (A and B are Hosts, R1 is a Router, L1 and L2 are the physical links/interfaces)
 
 ## How to run
 Dependencies:
