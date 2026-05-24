@@ -155,7 +155,7 @@ class NetworkLayer:
             
         return None
     
-    def _send_above(self, segment):
+    def _send_above(self, segment, src_ip):
         print(f"{self.device.name}: Layer 3: Segment delivered to Transport Layer\n")
         
         # pass up to transport layer
@@ -243,6 +243,14 @@ class DataLinkLayer:
     def __init__(self, device):
         self.device = device
         self.neighbours = []
+        self.mac_learning_table = {}
+        
+    def _send_above(self, frame):
+        print(f"{self.device.name}: Layer 2: Packet delivered to Network Layer\n")
+        self.device.network.receive_from_below(frame.payload)
+        
+    def _send_below(self, frame, neighbour, iface=None):
+        neighbour.datalink.receive_from_below(frame, iface)
 
     def receive_from_above(self, packet, next_hop, iface=None):
         print(f"{self.device.name}: Layer 2: Packet received from Network Layer")
@@ -271,17 +279,23 @@ class DataLinkLayer:
         # find the right neighbour and deliver the frame
         for neighbour in self.neighbours:
             if hasattr(neighbour, 'mac') and neighbour.mac == dst_mac:
-                neighbour.datalink.receive_from_below(frame, iface)
+                self._send_below(frame, neighbour, iface)
                 return
             if hasattr(neighbour, 'iface_mac') and dst_mac in neighbour.iface_mac.values():
                 # find which interface this corresponds to
                 arriving_iface = next(k for k, v in neighbour.iface_mac.items() if v == dst_mac)
-                neighbour.datalink.receive_from_below(frame, arriving_iface)
+                self._send_below(frame, neighbour, arriving_iface)
                 return
             
     def receive_from_below(self, frame, iface=None):
         is_router = hasattr(self.device, 'iface_mac')
+        
         print(f"{self.device.name}: Layer 2: Frame received{' on ' + iface if is_router and iface else ''}")
-        print(f"{self.device.name}: Layer 2: Source MAC learned: {frame.src_mac}{' on ' + iface if is_router and iface else ''}")
-        print(f"{self.device.name}: Layer 2: Packet delivered to Network Layer\n")
-        self.device.network.receive_from_below(frame.payload)
+        
+        if self.mac_learning_table.get(frame.src_mac, None) == None:
+            # learn the source MAC address from the received frame
+            self.mac_learning_table[frame.src_mac] = iface
+            print(f"{self.device.name}: Layer 2: Source MAC learned: {frame.src_mac}{' on ' + iface if is_router and iface else ''}")
+        # else, mac is already learned so move on
+        
+        self._send_above(frame)
