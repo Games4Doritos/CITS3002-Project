@@ -10,11 +10,13 @@ from config import (
 import sys
 
 def main():
+    # validates CLI arguments
     args = sys.argv
     if len(args) != 2:
         raise RuntimeError("Error: A single argument for data size was not passed")
     dataSize = int(args[1])
     
+    # initialises Host A in the topology
     hostA = Host(
         name="Host A",
         ip=IP_HOST_A,
@@ -23,6 +25,7 @@ def main():
         arp_table=ARP_TABLE_HOST_A
     )
     
+    # initialises Host B in the topology
     hostB = Host(
         name="Host B",
         ip=IP_HOST_B,
@@ -32,6 +35,7 @@ def main():
         
     )
     
+    # initialises Router R1 in the topology
     router1 = Router(
         name="Router R1",
         routing_table=ROUTING_TABLE_R1,
@@ -40,11 +44,14 @@ def main():
         iface_mac=R1_IFACE_MAC
     )
 
+    # connects the devices according to the topology
     hostA.connect(router1)
     router1.connect(hostA)
     router1.connect(hostB)
     hostB.connect(router1)
     
+    # simulates Host A sending data to Host B by Host A initially receiving date from the application layer 
+    # (not fully implemented as per spec, so a simple function call for Host A's transport layer)
     hostA.transport.receive_from_above(size=dataSize, dst_ip=IP_HOST_B)
 
 

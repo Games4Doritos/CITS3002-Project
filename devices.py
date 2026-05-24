@@ -6,11 +6,12 @@ class Host:
         self.ip = ip
         self.mac = mac
         self.arp_table = arp_table
-        self.transport = TransportLayer(self)
-        self.network = NetworkLayer(self, routing_table)
-        self.datalink = DataLinkLayer(self)
+        self.transport = TransportLayer(self) #embedded transport layer
+        self.network = NetworkLayer(self, routing_table) #embedded network layer
+        self.datalink = DataLinkLayer(self) #embedded data link layer
 
     def connect(self, neighbour):
+        # connects this host to another device via a physical link
         self.datalink.neighbours.append(neighbour)
 
 class Router:
@@ -19,12 +20,14 @@ class Router:
         self.arp_table = arp_table
         self.iface_mac = iface_mac
         self.iface_ip = iface_ip
-        self.network = NetworkLayer(self, routing_table)
-        self.datalink = DataLinkLayer(self)
+        self.network = NetworkLayer(self, routing_table) #embdedded network layer
+        self.datalink = DataLinkLayer(self) #embedded data link layer
+        # no transport layer is embedded as a router does not need that functionality for our constraints
 
     @property
     def ip(self):
         return list(self.iface_ip.values())
 
     def connect(self, neighbour):
+        # connects this router to another device via a physical link
         self.datalink.neighbours.append(neighbour)
