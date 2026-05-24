@@ -72,7 +72,7 @@ class TransportLayer:
         
     def _send_below(self, segment: UDPSegment, dst_ip:str):
         # send segment down to network layer
-        print(f"{self.device.name}: Layer 4: Segment sent to Network Layer")
+        print(f"{self.device.name}: Layer 4: Segment sent to Network Layer\n")
         self.device.network.receive_from_above(segment, dst_ip)
         
     def _verify_checksum(self, segment: UDPSegment):
@@ -156,13 +156,13 @@ class NetworkLayer:
         return None
     
     def _send_above(self, segment):
-        print(f"{self.device.name}: Layer 3: Segment delivered to Transport Layer")
+        print(f"{self.device.name}: Layer 3: Segment delivered to Transport Layer\n")
         
         # pass up to transport layer
         self.device.transport.receive_from_below(segment)
         
     def _send_below(self, packet, next_hop, iface=None):
-        print(f"{self.device.name}: Layer 3: Packet forwarded to Data Link Layer")  
+        print(f"{self.device.name}: Layer 3: Packet forwarded to Data Link Layer\n")  
         
         # pass down to DataLinkLayer
         self.device.datalink.receive_from_above(packet, next_hop, iface)
@@ -249,9 +249,9 @@ class DataLinkLayer:
         # determine log text — router says "forwarded", host says "sent"
         # determine log text — router says "forwarded", host says "sent"
         if hasattr(self.device, 'iface_mac') and iface:
-            print(f"{self.device.name}: Layer 2: Frame forwarded on {iface}")
+            print(f"{self.device.name}: Layer 2: Frame forwarded on {iface}\n")
         else:
-            print(f"{self.device.name}: Layer 2: Frame sent")
+            print(f"{self.device.name}: Layer 2: Frame sent\n")
         
         # find the right neighbour and deliver the frame
         for neighbour in self.neighbours:
@@ -268,5 +268,5 @@ class DataLinkLayer:
         is_router = hasattr(self.device, 'iface_mac')
         print(f"{self.device.name}: Layer 2: Frame received{' on ' + iface if is_router and iface else ''}")
         print(f"{self.device.name}: Layer 2: Source MAC learned: {frame.src_mac}{' on ' + iface if is_router and iface else ''}")
-        print(f"{self.device.name}: Layer 2: Packet delivered to Network Layer")
+        print(f"{self.device.name}: Layer 2: Packet delivered to Network Layer\n")
         self.device.network.receive_from_below(frame.payload)
