@@ -10,7 +10,7 @@ class Host:
         self.network = NetworkLayer(self, routing_table)
         self.datalink = DataLinkLayer(self)
 
-    def add_neighbour(self, neighbour):
+    def connect(self, neighbour):
         self.datalink.neighbours.append(neighbour)
 
 class Router:
@@ -26,5 +26,5 @@ class Router:
     def ip(self):
         return list(self.iface_ip.values())
 
-    def add_neighbour(self, neighbour):
+    def connect(self, neighbour):
         self.datalink.neighbours.append(neighbour)

@@ -40,10 +40,10 @@ def main():
         iface_mac=R1_IFACE_MAC
     )
 
-    hostA.add_neighbour(router1)
-    router1.add_neighbour(hostA)
-    router1.add_neighbour(hostB)
-    hostB.add_neighbour(router1)
+    hostA.connect(router1)
+    router1.connect(hostA)
+    router1.connect(hostB)
+    hostB.connect(router1)
     
     hostA.transport.receive_from_above(size=dataSize, dst_ip=IP_HOST_B)
 

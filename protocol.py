@@ -64,6 +64,7 @@ class TransportLayer:
     def __init__(self, device):
         self.device = device  # reference to parent Host
         self.seq = 0
+        self.curSegment = None
         
     def _send_above(self, segment: UDPSegment):
         # log delivery to application layer (not actually implemented as per spec)
@@ -71,6 +72,7 @@ class TransportLayer:
         
     def _send_below(self, segment: UDPSegment, dst_ip:str):
         # send segment down to network layer
+        self.curSegment = segment
         print(f"{self.device.name}: Layer 4: Segment sent to Network Layer\n")
         self.device.network.receive_from_above(segment, dst_ip)
         
@@ -80,7 +82,7 @@ class TransportLayer:
             print(f"{self.device.name}: Layer 4: Checksum verified")
             return True
         else:
-            print(f"{self.device.name}: Layer 4: Invalid checksum, segment has been discarded")
+            print(f"{self.device.name}: Layer 4: Invalid checksum, segment discarded")
             return False
         
     def _encapsulate(self, payload: bytes, type: int, seq:int):
@@ -95,6 +97,9 @@ class TransportLayer:
         print(f"{self.device.name}: Layer 4: Data received from Application Layer. Data size={size}")
         
         if size > UDP_MAX_DATA:
+            # if the data received from the application layer exceeds the maximum UDP payload size of 500 bytes,
+            # it is segmented into mutliple UDP segments with maximum payload sizes of 500 bytes
+            # due to the recursive nature of this code, waiting for _send_below() to return guarantees that segments are sent in order
             num_segments = math.ceil(size / UDP_MAX_DATA)
             for i in range(num_segments):
                 chunk = data[i * UDP_MAX_DATA : (i + 1) * UDP_MAX_DATA]
@@ -122,6 +127,11 @@ class TransportLayer:
             self._send_below(ACKSegment, src_ip)
         
         else:  # it's an ACK
+            if segment.seq != self.seq:
+                print(f"{self.device.name}: Layer 4: Unexpected ACK sequence number, segment discarded")
+                self.send_below(self.curSegment, src_ip)
+                return
+            
             print(f"{self.device.name}: Layer 4: ACK received: seq={segment.seq}")
             self.seq = 1 - self.seq
                 
