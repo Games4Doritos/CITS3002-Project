@@ -126,8 +126,9 @@ class TransportLayer:
                 
 
 class NetworkLayer:
-    def __init__(self, device):
+    def __init__(self, device, routing_table):
         self.device = device
+        self.routing_table = routing_table
 
     #helper function to convert IP adresses to integers  
     def _ip_to_int(self, address):
@@ -141,7 +142,7 @@ class NetworkLayer:
         # this convert dst_ip to an integer by shifting the values to their bitwise positions then summing all
         dst_ip_int = self._ip_to_int(dst_ip)
 
-        for entry in self.device.routing_table:
+        for entry in self.routing_table:
             
             # convert entry["network"] to an integer
             network_int = self._ip_to_int(entry["network"])
@@ -179,19 +180,22 @@ class NetworkLayer:
         # routing table lookup
         entry = self._lookup_routing_table(dst_ip)
         
+        # discard packet if destination is unreachable
         if not entry:
-            print(f"{self.device.name}: Layer 3: No Next-hop IP available, discarding packet")
+            print(f"{self.device.name}: Layer 3: Routing table lookup unsuccessful, destination is unreachable")
+            print(f"{self.device.name}: Layer 3: Discarding packet")
             return
         
         print(f"{self.device.name}: Layer 3: Routing table lookup performed")
         
+        # determine next hop IP
         next_hop = entry["next_hop"] if entry["next_hop"] is not None else dst_ip
-        
-        # print routing decision 
         print(f"{self.device.name}: Layer 3: Next-hop IP determined: {next_hop}")
+        
+        # determine outgoing interface
+        iface = entry["iface"]
         print(f"{self.device.name}: Layer 3: Outgoing interface selected")
         
-        iface = entry["iface"]
         self._send_below(packet, next_hop, iface)
        
 
@@ -208,17 +212,29 @@ class NetworkLayer:
             self._send_above(payload)
 
         else:
+            #decrement TTL and check if expired
             packet.ttl -= 1
             if packet.ttl == 0:
                 print(f"{self.device.name}: Layer 3: TTL expired, packet dropped")
                 return
-            entry = self._lookup_routing_table(packet.dst_ip)
-            next_hop = entry["next_hop"] if entry["next_hop"] is not None else packet.dst_ip
-            iface = entry["iface"]
-
             print(f"{self.device.name}: Layer 3: TTL decremented: {packet.ttl + 1} → {packet.ttl}")
+            
+            entry = self._lookup_routing_table(packet.dst_ip)
+            
+            # discard packet if destination is unreachable
+            if not entry:
+                print(f"{self.device.name}: Layer 3: Routing table lookup unsuccessful, destination is unreachable")
+                print(f"{self.device.name}: Layer 3: Discarding packet")
+                return
+            
             print(f"{self.device.name}: Layer 3: Routing table lookup performed")
+            
+            # determine next hop IP
+            next_hop = entry["next_hop"] if entry["next_hop"] is not None else packet.dst_ip
             print(f"{self.device.name}: Layer 3: Next-hop IP determined: {next_hop}")
+            
+            # determine outgoing interface
+            iface = entry["iface"]
             print(f"{self.device.name}: Layer 3: Outgoing interface selected ({iface})")
             
             self._send_below(packet, next_hop, iface)
