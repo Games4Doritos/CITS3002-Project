@@ -2,7 +2,7 @@
 
 | Student Name   | Student Number |
 |----------------|----------------|
-| Tom Nylund     |          |
+| Tom Nylund     | 22708177 |
 | Evan Miocevich | 24147733 |
 
 This is the implementation for the Computer Networks (CITS3002) Project: Mini Internet Protocol Stack Simulator (Python).
