@@ -82,24 +82,26 @@ class TransportLayer:
         else:
             print(f"{self.device.name}: Layer 4: Invalid checksum, segment has been discarded")
             return False
-
+        
+    def _encapsulate(self, payload: bytes, type: int, seq:int):
+        segment = UDPSegment(UDP_SRC_PORT, UDP_DST_PORT, type, seq, payload)
+        print(f"{self.device.name}: Layer 4: Checksum computed")
+        print(f"{self.device.name}: Layer 4: Segment created by adding transport layer header ({'DATA' if type == L4_TYPE_DATA else 'ACK'}, seq={seq}) (encapsulation)")
+        return segment
+        
     def receive_from_above(self, size: int, dst_ip:str):
         """Called by the application layer to send data."""
         data = b"X" * size
         print(f"{self.device.name}: Layer 4: Data received from Application Layer. Data size={size}")
-
+        
         if size > UDP_MAX_DATA:
             num_segments = math.ceil(size / UDP_MAX_DATA)
             for i in range(num_segments):
                 chunk = data[i * UDP_MAX_DATA : (i + 1) * UDP_MAX_DATA]
-                segment = UDPSegment(UDP_SRC_PORT, UDP_DST_PORT, L4_TYPE_DATA, self.seq, chunk)
-                print(f"{self.device.name}: Layer 4: Checksum computed")
-                print(f"{self.device.name}: Layer 4: Segment created by adding transport layer header ({'DATA' if segment.type == L4_TYPE_DATA else 'ACK'}, seq={self.seq}) (encapsulation)")
+                segment = self._encapsulate(chunk, L4_TYPE_DATA, self.seq)
                 self._send_below(segment, dst_ip)
         else:
-            segment = UDPSegment(UDP_SRC_PORT, UDP_DST_PORT, L4_TYPE_DATA, self.seq, data)
-            print(f"{self.device.name}: Layer 4: Checksum computed")
-            print(f"{self.device.name}: Layer 4: Segment created by adding transport layer header ({'DATA' if segment.type == L4_TYPE_DATA else 'ACK'}, seq={self.seq}) (encapsulation)")
+            segment = self._encapsulate(data, L4_TYPE_DATA, self.seq)
             self._send_below(segment, dst_ip)
 
     def receive_from_below(self, segment, src_ip):
@@ -115,9 +117,9 @@ class TransportLayer:
             self._send_above(segment)
             print(f"{self.device.name}: Layer 4: Segment created by adding transport layer header (ACK, seq={segment.seq})")
             
-            ACK = UDPSegment(UDP_DST_PORT, UDP_SRC_PORT, L4_TYPE_ACK, segment.seq)
+            ACKSegment = self._encapsulate(b'', L4_TYPE_ACK, segment.seq)
             
-            self._send_below(ACK, src_ip)
+            self._send_below(ACKSegment, src_ip)
         
         else:  # it's an ACK
             print(f"{self.device.name}: Layer 4: ACK received: seq={segment.seq}")
@@ -166,15 +168,23 @@ class NetworkLayer:
         
         # pass down to DataLinkLayer
         self.device.datalink.receive_from_above(packet, next_hop, iface)
+        
+    def _encapsulate(self, segment, dst_ip):
+        # print destination IP read
+        print(f"{self.device.name}: Layer 3: Destination IP read: {dst_ip}")
+        
+        packet = IPPacket(self.device.ip, dst_ip, segment)
+        return packet
+        
+    def _decapsulate(self, packet):
+        segment = packet.payload
+        return segment
     
     def receive_from_above(self, segment, dst_ip):
         print(f"{self.device.name}: Layer 3: Segment received from Transport Layer: SRC_IP={self.device.ip}, DST_IP={dst_ip}, TTL={IP_DEFAULT_TTL}")
         
         # create IPPacket
-        packet = IPPacket(self.device.ip, dst_ip, segment)
-        
-        # print destination IP read
-        print(f"{self.device.name}: Layer 3: Destination IP read: {dst_ip}")
+        packet = self._encapsulate(segment, dst_ip)
         
         # routing table lookup
         entry = self._lookup_routing_table(dst_ip)
@@ -207,7 +217,7 @@ class NetworkLayer:
 
         if packet.dst_ip in device_ips:
             print(f"{self.device.name}: Layer 3: Packet identified as local delivery")
-            payload = packet.payload
+            payload = self._decapsulate(packet)
             self._send_above(payload, packet.src_ip)
 
         else:
@@ -245,12 +255,21 @@ class DataLinkLayer:
         self.neighbours = []
         self.mac_learning_table = {}
         
-    def _send_above(self, frame):
+    def _send_above(self, packet):
         print(f"{self.device.name}: Layer 2: Packet delivered to Network Layer\n")
-        self.device.network.receive_from_below(frame.payload)
+        self.device.network.receive_from_below(packet)
         
     def _send_below(self, frame, neighbour, iface=None):
         neighbour.datalink.receive_from_below(frame, iface)
+        
+    def _encapsulate(self, packet, dst_mac, src_mac):
+        frame = EthernetFrame(src_mac, dst_mac, packet)
+        print(f"{self.device.name}: Layer 2: Frame created: SRC_MAC={src_mac}, DST_MAC={dst_mac}")
+        return frame
+    
+    def _decapsulate(self, frame):
+        packet = frame.payload
+        return packet
 
     def receive_from_above(self, packet, next_hop, iface=None):
         print(f"{self.device.name}: Layer 2: Packet received from Network Layer")
@@ -266,8 +285,7 @@ class DataLinkLayer:
             src_mac = self.device.mac
         
         # build the frame
-        frame = EthernetFrame(src_mac, dst_mac, packet)
-        print(f"{self.device.name}: Layer 2: Frame created: SRC_MAC={src_mac}, DST_MAC={dst_mac}")
+        frame = self._encapsulate(packet, dst_mac, src_mac)
         
         # determine log text — router says "forwarded", host says "sent"
         # determine log text — router says "forwarded", host says "sent"
@@ -298,4 +316,6 @@ class DataLinkLayer:
             print(f"{self.device.name}: Layer 2: Source MAC learned: {frame.src_mac}{' on ' + iface if is_router and iface else ''}")
         # else, mac is already learned so move on
         
-        self._send_above(frame)
+        packet = self._decapsulate(frame)
+        
+        self._send_above(packet)
