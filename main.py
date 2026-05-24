@@ -33,7 +33,7 @@ def main():
     )
     
     router1 = Router(
-        name="R1",
+        name="Router R1",
         routing_table=ROUTING_TABLE_R1,
         arp_table=ARP_TABLE_R1,
         iface_ip=R1_IFACE_IP,

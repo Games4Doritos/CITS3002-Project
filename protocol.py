@@ -72,9 +72,8 @@ class TransportLayer:
         
     def _send_below(self, segment: UDPSegment, dst_ip:str):
         # send segment down to network layer
-        print(f"{self.device.name}: Layer 4: Segment sent to network layer")
+        print(f"{self.device.name}: Layer 4: Segment sent to Network Layer")
         self.device.network.receive_from_above(segment, dst_ip)
-        self.seq = 1 - self.seq
         
     def _verify_checksum(self, segment: UDPSegment):
         # check if actual checksum = computed checksum
@@ -248,7 +247,8 @@ class DataLinkLayer:
         print(f"{self.device.name}: Layer 2: Frame created: SRC_MAC={src_mac}, DST_MAC={dst_mac}")
         
         # determine log text — router says "forwarded", host says "sent"
-        if iface:
+        # determine log text — router says "forwarded", host says "sent"
+        if hasattr(self.device, 'iface_mac') and iface:
             print(f"{self.device.name}: Layer 2: Frame forwarded on {iface}")
         else:
             print(f"{self.device.name}: Layer 2: Frame sent")
@@ -265,11 +265,8 @@ class DataLinkLayer:
                 return
             
     def receive_from_below(self, frame, iface=None):
-        print(f"{self.device.name}: Layer 2: Frame received{' on ' + iface if iface else ''}")
-        
-        # learn the source MAC
-        print(f"{self.device.name}: Layer 2: Source MAC learned: {frame.src_mac}{' on ' + iface if iface else ''}")
-        
-        # deliver payload up to network layer
+        is_router = hasattr(self.device, 'iface_mac')
+        print(f"{self.device.name}: Layer 2: Frame received{' on ' + iface if is_router and iface else ''}")
+        print(f"{self.device.name}: Layer 2: Source MAC learned: {frame.src_mac}{' on ' + iface if is_router and iface else ''}")
         print(f"{self.device.name}: Layer 2: Packet delivered to Network Layer")
         self.device.network.receive_from_below(frame.payload)
