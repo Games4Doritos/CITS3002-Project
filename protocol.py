@@ -5,27 +5,27 @@ from config import (
     L4_TYPE_DATA, L4_TYPE_ACK, UDP_MAX_DATA
 )
 
-##### HELPER FUNCTIONS #####
-
-def compute_checksum(data: bytes) -> int:
-    """Compute a 16-bit checksum by summing all bytes mod 65536."""
-    checksum = 0
-    for byte in data:
-        checksum += byte
-    return checksum % 65536
-
-
 ##### HEADER CLASSES #####
 
 class UDPSegment:
     def __init__(self, src_port, dst_port, seg_type, seq, payload=b""):
-        self.src_port = src_port
-        self.dst_port = dst_port
-        self.length = len(payload) + UDP_HEADER_SIZE
-        self.checksum = compute_checksum(payload)
-        self.type = seg_type
-        self.seq = seq
-        self.payload = payload
+        self.src_port = src_port # source port
+        self.dst_port = dst_port # destination port
+        self.length = len(payload) + UDP_HEADER_SIZE # total segment length
+        self.type = seg_type # segment type (DATA or ACK)
+        self.seq = seq # sequence number (0 or 1)
+        self.payload = payload # payload in bytes
+        self.checksum = self.compute_checksum() # checksum
+        
+    def compute_checksum(self) -> int:
+        """Compute a 16-bit checksum by summing all bytes mod 65536."""
+        # includes both header fields and the payload
+        checksum = self.src_port + self.dst_port + self.length + self.type + self.seq
+        for byte in self.payload:
+            checksum += byte
+        # 16-bit words -> mod 65536 = 2^16
+        return checksum % 65536
+
 
     def __repr__(self):
         return (f"UDPSegment(type={'DATA' if self.type == 0 else 'ACK'}, "
@@ -34,12 +34,12 @@ class UDPSegment:
 
 class IPPacket:
     def __init__(self, src_ip, dst_ip, payload):
-        self.src_ip = src_ip
-        self.dst_ip = dst_ip
-        self.payload = payload
-        self.ttl = IP_DEFAULT_TTL
-        self.protocol = IP_PROTO_UDP
-        self.total_length = 12 + payload.length
+        self.src_ip = src_ip # source IP address
+        self.dst_ip = dst_ip # destination IP address
+        self.payload = payload # payload is a UDPSegment
+        self.ttl = IP_DEFAULT_TTL # time-to-live (decremented by 1 at each hop)
+        self.protocol = IP_PROTO_UDP # protocol field indicating UDP payload
+        self.total_length = 12 + payload.length # total packet length
 
     def __repr__(self):
         return (f"IPPacket(src={self.src_ip}, dst={self.dst_ip}, "
@@ -48,10 +48,10 @@ class IPPacket:
 
 class EthernetFrame:
     def __init__(self, src_mac, dst_mac, payload):
-        self.src_mac = src_mac
-        self.dst_mac = dst_mac
-        self.type = ETHER_TYPE_IPV4
-        self.payload = payload
+        self.src_mac = src_mac # source MAC address
+        self.dst_mac = dst_mac # destination MAC address
+        self.type = ETHER_TYPE_IPV4 # EtherType indicating IPv4 payload
+        self.payload = payload # payload is an IPPacket
 
     def __repr__(self):
         return (f"EthernetFrame(src={self.src_mac}, "
@@ -76,7 +76,7 @@ class TransportLayer:
         
     def _verify_checksum(self, segment: UDPSegment):
         # check if actual checksum = computed checksum
-        if segment.checksum == compute_checksum(segment.payload):
+        if segment.checksum == segment.compute_checksum():
             print(f"{self.device.name}: Layer 4: Checksum verified")
             return True
         else:
