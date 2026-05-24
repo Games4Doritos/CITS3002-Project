@@ -16,7 +16,7 @@ def main():
     dataSize = int(args[1])
     
     hostA = Host(
-        name="A",
+        name="Host A",
         ip=IP_HOST_A,
         mac=MAC_HOST_A,
         routing_table=ROUTING_TABLE_HOST_A,
@@ -24,7 +24,7 @@ def main():
     )
     
     hostB = Host(
-        name="B",
+        name="Host B",
         ip=IP_HOST_B,
         mac=MAC_HOST_B,
         routing_table=ROUTING_TABLE_HOST_B,
