@@ -72,9 +72,8 @@ class TransportLayer:
         
     def _send_below(self, segment: UDPSegment, dst_ip:str):
         # send segment down to network layer
-        print(f"{self.device.name}: Layer 4: Segment sent to network layer")
+        print(f"{self.device.name}: Layer 4: Segment sent to Network Layer")
         self.device.network.receive_from_above(segment, dst_ip)
-        self.seq = 1 - self.seq
         
     def _verify_checksum(self, segment: UDPSegment):
         # check if actual checksum = computed checksum
@@ -162,11 +161,11 @@ class NetworkLayer:
         # pass up to transport layer
         self.device.transport.receive_from_below(segment)
         
-    def _send_below(self, packet, next_hop):
+    def _send_below(self, packet, next_hop, iface=None):
         print(f"{self.device.name}: Layer 3: Packet forwarded to Data Link Layer")  
         
         # pass down to DataLinkLayer
-        self.device.datalink.receive_from_above(packet, next_hop)
+        self.device.datalink.receive_from_above(packet, next_hop, iface)
     
     def receive_from_above(self, segment, dst_ip):
         print(f"{self.device.name}: Layer 3: Segment received from Transport Layer: SRC_IP={self.device.ip}, DST_IP={dst_ip}, TTL={IP_DEFAULT_TTL}")
@@ -192,29 +191,27 @@ class NetworkLayer:
         print(f"{self.device.name}: Layer 3: Next-hop IP determined: {next_hop}")
         print(f"{self.device.name}: Layer 3: Outgoing interface selected")
         
-        self._send_below(packet, next_hop)
+        iface = entry["iface"]
+        self._send_below(packet, next_hop, iface)
        
 
     def receive_from_below(self, packet):
         print(f"{self.device.name}: Layer 3: Packet received from Data Link Layer: SRC_IP={packet.src_ip}, DST_IP={packet.dst_ip}, TTL={packet.ttl}")
         print(f"{self.device.name}: Layer 3: Destination IP read: {packet.dst_ip}")
 
-        if packet.dst_ip == self.device.ip:
+        # handle both Host (single ip string) and Router (list of ips)
+        device_ips = self.device.ip if isinstance(self.device.ip, list) else [self.device.ip]
+
+        if packet.dst_ip in device_ips:
             print(f"{self.device.name}: Layer 3: Packet identified as local delivery")
-            
-            # decapsulate packet to send payload above
             payload = packet.payload
-            
             self._send_above(payload)
 
         else:
-            # decrement TTL
             packet.ttl -= 1
-            # check if TTL == 0, drop if so
             if packet.ttl == 0:
                 print(f"{self.device.name}: Layer 3: TTL expired, packet dropped")
                 return
-            # lookup routing table
             entry = self._lookup_routing_table(packet.dst_ip)
             next_hop = entry["next_hop"] if entry["next_hop"] is not None else packet.dst_ip
             iface = entry["iface"]
@@ -224,9 +221,52 @@ class NetworkLayer:
             print(f"{self.device.name}: Layer 3: Next-hop IP determined: {next_hop}")
             print(f"{self.device.name}: Layer 3: Outgoing interface selected ({iface})")
             
-            self._send_below(packet, next_hop)
+            self._send_below(packet, next_hop, iface)
             
             
 class DataLinkLayer:
     def __init__(self, device):
         self.device = device
+        self.neighbours = []
+
+    def receive_from_above(self, packet, next_hop, iface=None):
+        print(f"{self.device.name}: Layer 2: Packet received from Network Layer")
+        
+        # look up destination MAC from ARP table using next_hop IP
+        dst_mac = self.device.arp_table[next_hop]
+        print(f"{self.device.name}: Layer 2: Destination MAC lookup for next-hop IP ({next_hop}) → {dst_mac}")
+        
+        # determine source MAC — router uses interface MAC, host uses its own MAC
+        if hasattr(self.device, 'iface_mac') and iface:
+            src_mac = self.device.iface_mac[iface]
+        else:
+            src_mac = self.device.mac
+        
+        # build the frame
+        frame = EthernetFrame(src_mac, dst_mac, packet)
+        print(f"{self.device.name}: Layer 2: Frame created: SRC_MAC={src_mac}, DST_MAC={dst_mac}")
+        
+        # determine log text — router says "forwarded", host says "sent"
+        # determine log text — router says "forwarded", host says "sent"
+        if hasattr(self.device, 'iface_mac') and iface:
+            print(f"{self.device.name}: Layer 2: Frame forwarded on {iface}")
+        else:
+            print(f"{self.device.name}: Layer 2: Frame sent")
+        
+        # find the right neighbour and deliver the frame
+        for neighbour in self.neighbours:
+            if hasattr(neighbour, 'mac') and neighbour.mac == dst_mac:
+                neighbour.datalink.receive_from_below(frame, iface)
+                return
+            if hasattr(neighbour, 'iface_mac') and dst_mac in neighbour.iface_mac.values():
+                # find which interface this corresponds to
+                arriving_iface = next(k for k, v in neighbour.iface_mac.items() if v == dst_mac)
+                neighbour.datalink.receive_from_below(frame, arriving_iface)
+                return
+            
+    def receive_from_below(self, frame, iface=None):
+        is_router = hasattr(self.device, 'iface_mac')
+        print(f"{self.device.name}: Layer 2: Frame received{' on ' + iface if is_router and iface else ''}")
+        print(f"{self.device.name}: Layer 2: Source MAC learned: {frame.src_mac}{' on ' + iface if is_router and iface else ''}")
+        print(f"{self.device.name}: Layer 2: Packet delivered to Network Layer")
+        self.device.network.receive_from_below(frame.payload)

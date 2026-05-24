@@ -33,12 +33,17 @@ def main():
     )
     
     router1 = Router(
-        name="R1",
+        name="Router R1",
         routing_table=ROUTING_TABLE_R1,
         arp_table=ARP_TABLE_R1,
         iface_ip=R1_IFACE_IP,
         iface_mac=R1_IFACE_MAC
     )
+
+    hostA.add_neighbour(router1)
+    router1.add_neighbour(hostA)
+    router1.add_neighbour(hostB)
+    hostB.add_neighbour(router1)
     
     hostA.transport.receive_from_above(size=dataSize, dst_ip=IP_HOST_B)
 
