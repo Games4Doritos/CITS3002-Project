@@ -2,8 +2,7 @@ import math
 from config import (
     IP_DEFAULT_TTL, IP_PROTO_UDP, ETHER_TYPE_IPV4,
     UDP_SRC_PORT, UDP_DST_PORT, UDP_HEADER_SIZE,
-    L4_TYPE_DATA, L4_TYPE_ACK, UDP_MAX_DATA,
-    IP_HOST_A, IP_HOST_B
+    L4_TYPE_DATA, L4_TYPE_ACK, UDP_MAX_DATA
 )
 
 ##### HELPER FUNCTIONS #####
@@ -103,7 +102,7 @@ class TransportLayer:
             print(f"{self.device.name}: Layer 4: Segment created by adding transport layer header ({'DATA' if segment.type == L4_TYPE_DATA else 'ACK'}, seq={self.seq}) (encapsulation)")
             self._send_below(segment, dst_ip)
 
-    def receive_from_below(self, segment):
+    def receive_from_below(self, segment, src_ip):
         print(f"{self.device.name}: Layer 4: Segment received from Network Layer")
         
         # check if checksum is valid, if not; discard
@@ -118,7 +117,7 @@ class TransportLayer:
             
             ACK = UDPSegment(UDP_DST_PORT, UDP_SRC_PORT, L4_TYPE_ACK, segment.seq)
             
-            self._send_below(ACK, IP_HOST_A)
+            self._send_below(ACK, src_ip)
         
         else:  # it's an ACK
             print(f"{self.device.name}: Layer 4: ACK received: seq={segment.seq}")
@@ -159,7 +158,7 @@ class NetworkLayer:
         print(f"{self.device.name}: Layer 3: Segment delivered to Transport Layer\n")
         
         # pass up to transport layer
-        self.device.transport.receive_from_below(segment)
+        self.device.transport.receive_from_below(segment, src_ip)
         
     def _send_below(self, packet, next_hop, iface=None):
         print(f"{self.device.name}: Layer 3: Packet forwarded to Data Link Layer\n")  
@@ -205,7 +204,7 @@ class NetworkLayer:
         if packet.dst_ip in device_ips:
             print(f"{self.device.name}: Layer 3: Packet identified as local delivery")
             payload = packet.payload
-            self._send_above(payload)
+            self._send_above(payload, packet.src_ip)
 
         else:
             packet.ttl -= 1
