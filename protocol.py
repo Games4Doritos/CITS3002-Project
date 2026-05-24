@@ -5,27 +5,27 @@ from config import (
     L4_TYPE_DATA, L4_TYPE_ACK, UDP_MAX_DATA
 )
 
-##### HELPER FUNCTIONS #####
-
-def compute_checksum(data: bytes) -> int:
-    """Compute a 16-bit checksum by summing all bytes mod 65536."""
-    checksum = 0
-    for byte in data:
-        checksum += byte
-    return checksum % 65536
-
-
 ##### HEADER CLASSES #####
 
 class UDPSegment:
     def __init__(self, src_port, dst_port, seg_type, seq, payload=b""):
-        self.src_port = src_port
-        self.dst_port = dst_port
-        self.length = len(payload) + UDP_HEADER_SIZE
-        self.checksum = compute_checksum(payload)
-        self.type = seg_type
-        self.seq = seq
-        self.payload = payload
+        self.src_port = src_port # source port
+        self.dst_port = dst_port # destination port
+        self.length = len(payload) + UDP_HEADER_SIZE # total segment length
+        self.type = seg_type # segment type (DATA or ACK)
+        self.seq = seq # sequence number (0 or 1)
+        self.payload = payload # payload in bytes
+        self.checksum = self.compute_checksum() # checksum
+        
+    def compute_checksum(self) -> int:
+        """Compute a 16-bit checksum by summing all bytes mod 65536."""
+        # includes both header fields and the payload
+        checksum = self.src_port + self.dst_port + self.length + self.type + self.seq
+        for byte in self.payload:
+            checksum += byte
+        # 16-bit words -> mod 65536 = 2^16
+        return checksum % 65536
+
 
     def __repr__(self):
         return (f"UDPSegment(type={'DATA' if self.type == 0 else 'ACK'}, "
@@ -34,12 +34,12 @@ class UDPSegment:
 
 class IPPacket:
     def __init__(self, src_ip, dst_ip, payload):
-        self.src_ip = src_ip
-        self.dst_ip = dst_ip
-        self.payload = payload
-        self.ttl = IP_DEFAULT_TTL
-        self.protocol = IP_PROTO_UDP
-        self.total_length = 12 + payload.length
+        self.src_ip = src_ip # source IP address
+        self.dst_ip = dst_ip # destination IP address
+        self.payload = payload # payload is a UDPSegment
+        self.ttl = IP_DEFAULT_TTL # time-to-live (decremented by 1 at each hop)
+        self.protocol = IP_PROTO_UDP # protocol field indicating UDP payload
+        self.total_length = 12 + payload.length # total packet length
 
     def __repr__(self):
         return (f"IPPacket(src={self.src_ip}, dst={self.dst_ip}, "
@@ -48,10 +48,10 @@ class IPPacket:
 
 class EthernetFrame:
     def __init__(self, src_mac, dst_mac, payload):
-        self.src_mac = src_mac
-        self.dst_mac = dst_mac
-        self.type = ETHER_TYPE_IPV4
-        self.payload = payload
+        self.src_mac = src_mac # source MAC address
+        self.dst_mac = dst_mac # destination MAC address
+        self.type = ETHER_TYPE_IPV4 # EtherType indicating IPv4 payload
+        self.payload = payload # payload is an IPPacket
 
     def __repr__(self):
         return (f"EthernetFrame(src={self.src_mac}, "
@@ -76,7 +76,7 @@ class TransportLayer:
         
     def _verify_checksum(self, segment: UDPSegment):
         # check if actual checksum = computed checksum
-        if segment.checksum == compute_checksum(segment.payload):
+        if segment.checksum == segment.compute_checksum():
             print(f"{self.device.name}: Layer 4: Checksum verified")
             return True
         else:
@@ -125,8 +125,9 @@ class TransportLayer:
                 
 
 class NetworkLayer:
-    def __init__(self, device):
+    def __init__(self, device, routing_table):
         self.device = device
+        self.routing_table = routing_table
 
     #helper function to convert IP adresses to integers  
     def _ip_to_int(self, address):
@@ -140,7 +141,7 @@ class NetworkLayer:
         # this convert dst_ip to an integer by shifting the values to their bitwise positions then summing all
         dst_ip_int = self._ip_to_int(dst_ip)
 
-        for entry in self.device.routing_table:
+        for entry in self.routing_table:
             
             # convert entry["network"] to an integer
             network_int = self._ip_to_int(entry["network"])
@@ -154,7 +155,7 @@ class NetworkLayer:
             
         return None
     
-    def _send_above(self, segment):
+    def _send_above(self, segment, src_ip):
         print(f"{self.device.name}: Layer 3: Segment delivered to Transport Layer\n")
         
         # pass up to transport layer
@@ -178,19 +179,22 @@ class NetworkLayer:
         # routing table lookup
         entry = self._lookup_routing_table(dst_ip)
         
+        # discard packet if destination is unreachable
         if not entry:
-            print(f"{self.device.name}: Layer 3: No Next-hop IP available, discarding packet")
+            print(f"{self.device.name}: Layer 3: Routing table lookup unsuccessful, destination is unreachable")
+            print(f"{self.device.name}: Layer 3: Discarding packet")
             return
         
         print(f"{self.device.name}: Layer 3: Routing table lookup performed")
         
+        # determine next hop IP
         next_hop = entry["next_hop"] if entry["next_hop"] is not None else dst_ip
-        
-        # print routing decision 
         print(f"{self.device.name}: Layer 3: Next-hop IP determined: {next_hop}")
+        
+        # determine outgoing interface
+        iface = entry["iface"]
         print(f"{self.device.name}: Layer 3: Outgoing interface selected")
         
-        iface = entry["iface"]
         self._send_below(packet, next_hop, iface)
        
 
@@ -207,17 +211,29 @@ class NetworkLayer:
             self._send_above(payload, packet.src_ip)
 
         else:
+            #decrement TTL and check if expired
             packet.ttl -= 1
             if packet.ttl == 0:
                 print(f"{self.device.name}: Layer 3: TTL expired, packet dropped")
                 return
-            entry = self._lookup_routing_table(packet.dst_ip)
-            next_hop = entry["next_hop"] if entry["next_hop"] is not None else packet.dst_ip
-            iface = entry["iface"]
-
             print(f"{self.device.name}: Layer 3: TTL decremented: {packet.ttl + 1} → {packet.ttl}")
+            
+            entry = self._lookup_routing_table(packet.dst_ip)
+            
+            # discard packet if destination is unreachable
+            if not entry:
+                print(f"{self.device.name}: Layer 3: Routing table lookup unsuccessful, destination is unreachable")
+                print(f"{self.device.name}: Layer 3: Discarding packet")
+                return
+            
             print(f"{self.device.name}: Layer 3: Routing table lookup performed")
+            
+            # determine next hop IP
+            next_hop = entry["next_hop"] if entry["next_hop"] is not None else packet.dst_ip
             print(f"{self.device.name}: Layer 3: Next-hop IP determined: {next_hop}")
+            
+            # determine outgoing interface
+            iface = entry["iface"]
             print(f"{self.device.name}: Layer 3: Outgoing interface selected ({iface})")
             
             self._send_below(packet, next_hop, iface)
@@ -227,6 +243,14 @@ class DataLinkLayer:
     def __init__(self, device):
         self.device = device
         self.neighbours = []
+        self.mac_learning_table = {}
+        
+    def _send_above(self, frame):
+        print(f"{self.device.name}: Layer 2: Packet delivered to Network Layer\n")
+        self.device.network.receive_from_below(frame.payload)
+        
+    def _send_below(self, frame, neighbour, iface=None):
+        neighbour.datalink.receive_from_below(frame, iface)
 
     def receive_from_above(self, packet, next_hop, iface=None):
         print(f"{self.device.name}: Layer 2: Packet received from Network Layer")
@@ -255,17 +279,23 @@ class DataLinkLayer:
         # find the right neighbour and deliver the frame
         for neighbour in self.neighbours:
             if hasattr(neighbour, 'mac') and neighbour.mac == dst_mac:
-                neighbour.datalink.receive_from_below(frame, iface)
+                self._send_below(frame, neighbour, iface)
                 return
             if hasattr(neighbour, 'iface_mac') and dst_mac in neighbour.iface_mac.values():
                 # find which interface this corresponds to
                 arriving_iface = next(k for k, v in neighbour.iface_mac.items() if v == dst_mac)
-                neighbour.datalink.receive_from_below(frame, arriving_iface)
+                self._send_below(frame, neighbour, arriving_iface)
                 return
             
     def receive_from_below(self, frame, iface=None):
         is_router = hasattr(self.device, 'iface_mac')
+        
         print(f"{self.device.name}: Layer 2: Frame received{' on ' + iface if is_router and iface else ''}")
-        print(f"{self.device.name}: Layer 2: Source MAC learned: {frame.src_mac}{' on ' + iface if is_router and iface else ''}")
-        print(f"{self.device.name}: Layer 2: Packet delivered to Network Layer\n")
-        self.device.network.receive_from_below(frame.payload)
+        
+        if self.mac_learning_table.get(frame.src_mac, None) == None:
+            # learn the source MAC address from the received frame
+            self.mac_learning_table[frame.src_mac] = iface
+            print(f"{self.device.name}: Layer 2: Source MAC learned: {frame.src_mac}{' on ' + iface if is_router and iface else ''}")
+        # else, mac is already learned so move on
+        
+        self._send_above(frame)
