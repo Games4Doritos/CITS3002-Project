@@ -7,6 +7,7 @@ from config import (
 
 ##### HEADER CLASSES #####
 
+# Transport Layer header: UDP-like segment
 class UDPSegment:
     def __init__(self, src_port, dst_port, seg_type, seq, payload=b""):
         self.src_port = src_port # source port
@@ -31,7 +32,7 @@ class UDPSegment:
         return (f"UDPSegment(type={'DATA' if self.type == 0 else 'ACK'}, "
                 f"seq={self.seq}, len={self.length}, checksum={self.checksum})")
 
-
+# network layer header: IPv4-like packet
 class IPPacket:
     def __init__(self, src_ip, dst_ip, payload):
         self.src_ip = src_ip # source IP address
@@ -45,7 +46,7 @@ class IPPacket:
         return (f"IPPacket(src={self.src_ip}, dst={self.dst_ip}, "
                 f"TTL={self.ttl}, len={self.total_length})")
 
-
+# data link layer header: Ethernet-like frame
 class EthernetFrame:
     def __init__(self, src_mac, dst_mac, payload):
         self.src_mac = src_mac # source MAC address
@@ -60,6 +61,8 @@ class EthernetFrame:
 
 ##### LAYER CLASSES #####
 
+# Transport Layer class with UDP-like functionality that implements the RDT2.2 protocol 
+# (sender and receiver as implied from the spec, with the sequence of operations preventing any breaking of roles via recursion)
 class TransportLayer:
     def __init__(self, device):
         self.device = device  # reference to parent Host
@@ -135,7 +138,8 @@ class TransportLayer:
             print(f"{self.device.name}: Layer 4: ACK received: seq={segment.seq}")
             self.seq = 1 - self.seq
                 
-
+# Network Layer Class with IPv4-like functionality, including routing table lookup and TTL handling
+# next-hop IP and outgoing interface are determined from routing table lookup, which are then passed with the packet down to the Data Link Layer
 class NetworkLayer:
     def __init__(self, device, routing_table):
         self.device = device
@@ -258,7 +262,8 @@ class NetworkLayer:
             
             self._send_below(packet, next_hop, iface)
             
-            
+# Data Link Layer class with Ethernet-like functionality, including ARP table lookup for MAC address resolution and a simple MAC learning mechanism from incoming frames
+# next-hop IP is resolved to destination MAC via ARP table
 class DataLinkLayer:
     def __init__(self, device):
         self.device = device
