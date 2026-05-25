@@ -92,7 +92,7 @@ class TransportLayer:
         segment = UDPSegment(UDP_SRC_PORT, UDP_DST_PORT, type, seq, payload)
         if type == L4_TYPE_DATA:
             print(f"{self.device.name}: Layer 4: Checksum computed")
-        print(f"{self.device.name}: Layer 4: Segment created by adding transport layer header ({'DATA' if type == L4_TYPE_DATA else 'ACK'}, seq={seq}) {'(encapsulation)' if type == L4_TYPE_DATA else ''}")
+        print(f"{self.device.name}: Layer 4: Segment created by adding transport layer header ({'DATA' if type == L4_TYPE_DATA else 'ACK'}, seq={seq}){' (encapsulation)' if type == L4_TYPE_DATA else ''}")
         return segment
         
     def receive_from_above(self, size: int, dst_ip:str):
