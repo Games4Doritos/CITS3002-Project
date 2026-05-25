@@ -88,11 +88,11 @@ class TransportLayer:
             print(f"{self.device.name}: Layer 4: Invalid checksum, segment discarded")
             return False
         
-    def _encapsulate(self, payload: bytes, type: int, seq:int):
-        segment = UDPSegment(UDP_SRC_PORT, UDP_DST_PORT, type, seq, payload)
-        if type == L4_TYPE_DATA:
-            print(f"{self.device.name}: Layer 4: Checksum computed")
-        print(f"{self.device.name}: Layer 4: Segment created by adding transport layer header ({'DATA' if type == L4_TYPE_DATA else 'ACK'}, seq={seq}){' (encapsulation)' if type == L4_TYPE_DATA else ''}")
+    def _encapsulate(self, payload: bytes, seq:int):
+        # only encapsulate for DATA segments, ACk segments have no payload and a fixed header
+        segment = UDPSegment(UDP_SRC_PORT, UDP_DST_PORT, L4_TYPE_DATA, seq, payload)
+        print(f"{self.device.name}: Layer 4: Checksum computed")
+        print(f"{self.device.name}: Layer 4: Segment created by adding transport layer header (DATA, seq={seq}) (encapsulation)")
         return segment
         
     def receive_from_above(self, size: int, dst_ip:str):
@@ -105,12 +105,14 @@ class TransportLayer:
             # it is segmented into mutliple UDP segments with maximum payload sizes of 500 bytes
             # due to the recursive nature of this code, waiting for _send_below() to return guarantees that segments are sent in order
             num_segments = math.ceil(size / UDP_MAX_DATA)
+            print(f"{self.device.name}: Layer 4: Data size exceeds maximum segment payload, segmenting  data into {num_segments} segments")
             for i in range(num_segments):
                 chunk = data[i * UDP_MAX_DATA : (i + 1) * UDP_MAX_DATA]
-                segment = self._encapsulate(chunk, L4_TYPE_DATA, self.seq)
+                print(f"{self.device.name}: Layer 4: Selecting segment {i+1} of {num_segments} for transmission. Data size={len(chunk)}")
+                segment = self._encapsulate(chunk, self.seq)
                 self._send_below(segment, dst_ip)
         else:
-            segment = self._encapsulate(data, L4_TYPE_DATA, self.seq)
+            segment = self._encapsulate(data, self.seq)
             self._send_below(segment, dst_ip)
 
     def receive_from_below(self, segment, src_ip):
@@ -124,17 +126,20 @@ class TransportLayer:
         if segment.type == L4_TYPE_DATA:
             
             self._send_above(segment)
-            
-            ACKSegment = self._encapsulate(b'', L4_TYPE_ACK, segment.seq)
+            # send an ACK back to the sender
+            ACKSegment = UDPSegment(UDP_SRC_PORT, UDP_DST_PORT, L4_TYPE_ACK, segment.seq)
+            print(f"{self.device.name}: Layer 4: Segment created by adding transport layer header (ACK, seq={segment.seq})")
             
             self._send_below(ACKSegment, src_ip)
         
         else:  # it's an ACK
+            # re-sends current segment if ACK sequence number is unexpected
             if segment.seq != self.seq:
-                print(f"{self.device.name}: Layer 4: Unexpected ACK sequence number, segment discarded")
-                self.send_below(self.curSegment, src_ip)
+                print(f"{self.device.name}: Layer 4: Unexpected ACK sequence number, segment discarded and DATA segment to be re-sent")
+                self._send_below(self.curSegment, src_ip)
                 return
             
+            # flips sequence number if ACK is as expected
             print(f"{self.device.name}: Layer 4: ACK received: seq={segment.seq}")
             self.seq = 1 - self.seq
                 
